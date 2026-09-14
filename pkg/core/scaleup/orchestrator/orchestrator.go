@@ -176,7 +176,7 @@ func (o *ScaleUpOrchestrator) ScaleUp(
 		return st, aErr
 	}
 	// Execute scale up.
-	logger.V(1).Info("Executing final scale-up plan", "scaleUpInfos", plan.scaleUpInfos)
+	logger.V(1).Info("Final scale-up plan", "scaleUpInfos", plan.scaleUpInfos)
 	aErr, failedNodeGroups := o.scaleUpExecutor.ExecuteScaleUps(ctx, plan.scaleUpInfos, now, allOrNothing)
 	if aErr != nil {
 		failedGroupsMap := o.buildFailedGroupsMap(failedNodeGroups, plan.scaleUpInfos)
@@ -235,7 +235,7 @@ func (o *ScaleUpOrchestrator) ScaleUpToNodeGroupMinSize(
 
 	now := time.Now()
 	nodeGroups := o.autoscalingCtx.CloudProvider.NodeGroups(ctx)
-	scaleUpInfos := make([]nodegroupset.ScaleUpInfo, 0)
+	scaleUpInfos := make(nodegroupset.ScaleUpInfos, 0)
 
 	tracker, err := o.quotasTrackerFactory.NewQuotasTracker(ctx, o.autoscalingCtx, nodes)
 	if err != nil {
@@ -1063,7 +1063,7 @@ type scaleUpCtx struct {
 }
 
 type scaleUpPlan struct {
-	scaleUpInfos           []nodegroupset.ScaleUpInfo
+	scaleUpInfos           nodegroupset.ScaleUpInfos
 	createNodeGroupResults []nodegroups.CreateNodeGroupResult
 	bestOption             *expander.Option
 	nodeGroups             []cloudprovider.NodeGroup
