@@ -110,12 +110,6 @@ var _ = BeforeSuite(func() {
 	err = cqctrl.NewCapacityQuotaReconciler(mgr.GetClient(), cqctrl.ReconcilerOptions{NodeFilter: utils.VirtualKubeletNodeFilter{}}).SetupWithManager(mgr)
 	Expect(err).ToNot(HaveOccurred())
 
-	go func() {
-		defer GinkgoRecover()
-		err = mgr.Start(ctx)
-		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
-	}()
-
 	client, err := cbclient.NewCapacityBufferClientFromConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -128,8 +122,14 @@ var _ = BeforeSuite(func() {
 		reconciliationCache,
 		clock,
 	)
+	err = mgr.Add(controller)
+	Expect(err).ToNot(HaveOccurred())
 
-	go controller.Run(ctx.Done())
+	go func() {
+		defer GinkgoRecover()
+		err = mgr.Start(ctx)
+		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
+	}()
 })
 
 var _ = AfterSuite(func() {

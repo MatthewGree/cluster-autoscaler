@@ -21,17 +21,17 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"time"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	v1 "k8s.io/autoscaler/cluster-autoscaler/apis/capacitybuffer/autoscaling.x-k8s.io/v1beta1"
 	"k8s.io/utils/clock"
@@ -47,8 +47,8 @@ import (
 
 // BufferController performs updates on Buffers and convert them to pods to be injected
 type BufferController interface {
-	// Run to run the reconciliation loop frequently every x seconds
-	Run(stopCh <-chan struct{})
+	// Start starts the controller, blocks until context is done.
+	Start(ctx context.Context) error
 }
 
 type bufferController struct {
@@ -88,21 +88,24 @@ func NewBufferController(
 }
 
 // InitializeAndRunDefaultBufferController creates the default Capacity buffer controller and processing interval metric collector
-// and runs each of them asyncrounsly
+// and runs each of them asynchronously
 func InitializeAndRunDefaultBufferController(
 	ctx context.Context,
+	mgr ctrl.Manager,
 	client *cbclient.CapacityBufferClient,
 	resolver fakepods.Resolver,
-
-) {
+) error {
 	realClock := clock.RealClock{}
 	reconciledBuffersCache := cbmetrics.NewReconciliationCache()
 	// Accepting empty string as it represents nil value for ProvisioningStrategy
 	defaultStrategies := []string{capacitybuffer.ActiveProvisioningStrategy, ""}
 	controller := NewDefaultBufferController(client, resolver, defaultStrategies, reconciledBuffersCache, realClock)
-	go controller.Run(ctx.Done())
+	if err := mgr.Add(controller); err != nil {
+		return err
+	}
 
 	cbmetrics.RegisterReconciliationTimestampCollector(client, defaultStrategies, reconciledBuffersCache, realClock)
+	return nil
 }
 
 // NewDefaultBufferController creates bufferController with default configs
@@ -327,10 +330,9 @@ func (c *bufferController) enqueueBuffersReferencingScalableObject(obj interface
 	}
 }
 
-// Run to run the controller reconcile loop
-func (c *bufferController) Run(stopCh <-chan struct{}) {
-	defer runtime.HandleCrash()
-	defer c.queue.ShutDown()
+// Start starts the controller, blocking until context is done.
+func (c *bufferController) Start(ctx context.Context) error {
+	defer runtime.HandleCrashWithContext(ctx)
 
 	klog.Info("Starting CapacityBuffer controller workers")
 
@@ -338,18 +340,22 @@ func (c *bufferController) Run(stopCh <-chan struct{}) {
 	// CapacityBufferClient.NewCapacityBufferClientFromClients waits for sync before returning.
 
 	// Launch a single worker (namespace processing is serial per namespace anyway)
-	go wait.Until(c.runWorker, time.Second, stopCh)
-
-	<-stopCh
+	var wg sync.WaitGroup
+	wg.Go(func() { c.runWorker(ctx) })
+	<-ctx.Done()
 	klog.Info("Stopping CapacityBuffer controller")
+	c.queue.ShutDown()
+	wg.Wait()
+	klog.Info("Stopped CapacityBuffer controller")
+	return nil
 }
 
-func (c *bufferController) runWorker() {
-	for c.processNextItem() {
+func (c *bufferController) runWorker(ctx context.Context) {
+	for c.processNextItem(ctx) {
 	}
 }
 
-func (c *bufferController) processNextItem() bool {
+func (c *bufferController) processNextItem(ctx context.Context) bool {
 	key, quit := c.queue.Get()
 	if quit {
 		return false
@@ -363,7 +369,7 @@ func (c *bufferController) processNextItem() bool {
 	} else {
 		// Put the item back on the queue to handle it later
 		c.queue.AddRateLimited(key)
-		runtime.HandleError(fmt.Errorf("capacity buffer controller: error syncing namespace %q, requeueing", key))
+		runtime.HandleErrorWithContext(ctx, err, "capacity buffer controller: error reconciling namespace, requeueing", "namespace", key)
 	}
 	return true
 }
