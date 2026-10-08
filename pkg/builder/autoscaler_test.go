@@ -17,7 +17,6 @@ limitations under the License.
 package builder
 
 import (
-	"context"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -39,7 +38,7 @@ import (
 
 func TestAutoscalerBuilderNoError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ctx, cancel := context.WithCancel(testutils.GetTestContext(t))
+		ctx, cancel := testutils.GetTestContextWithCancel(t)
 
 		options := config.AutoscalingOptions{
 			CloudProviderName: "gce",
