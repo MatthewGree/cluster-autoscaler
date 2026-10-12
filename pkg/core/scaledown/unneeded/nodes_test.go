@@ -55,9 +55,9 @@ func TestUpdate(t *testing.T) {
 	initialTimestamp := time.Now()
 	finalTimestamp := initialTimestamp.Add(1 * time.Minute)
 	testCases := []struct {
-		desc           string
-		initialNodes   []simulator.NodeToBeRemoved
-		finalNodes     []simulator.NodeToBeRemoved
+		desc                 string
+		initialNodes         []simulator.NodeToBeRemoved
+		finalNodes           []simulator.NodeToBeRemoved
 		wantTimestamps       map[string]time.Time
 		wantVersions         map[string]string
 		wantThresholds       map[string]time.Duration
