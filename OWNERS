@@ -2,6 +2,7 @@ approvers:
 - sig-autoscaling-leads
 - aleksandra-malinowska
 - BigDarkClown
+- mtrqq
 - towca
 - x13n
 reviewers:
@@ -9,5 +10,4 @@ reviewers:
 - BigDarkClown
 - Choraden
 - x13n
-- mtrqq
 - norbertcyran
